@@ -1,0 +1,268 @@
+---
+title: "27기 이수정"
+output: html_document
+---
+0. 기본세팅
+```{r}
+#install.packages("plyr")
+#install.packages("tidyverse")
+#install.packages("data.table")
+library(plyr)
+library(tidyverse)
+library(data.table)
+
+#getwd()
+setwd("C:/Users/user/Desktop/P-SAT/1주차패키지")
+data<-fread('data.csv')
+```
+1. 데이터 확인
+```{r}
+str(data)
+
+for (i in 1:8){
+  print(sum(is.na(data[[i]])))
+}
+
+
+for (j in 1:8){
+  print(unique(data[[j]]))
+  print(length(unique(data[[j]])))
+}
+```
+2-1. NA가 있는 행을 삭제하세요.
+```{r}
+#아래 for문을 통해 원래 열의 행의 개수가 5165임을 알 수 있음
+#for (i in 1:8){
+#  print(length(data[[i]]))
+#}
+
+data<-na.omit(data)
+
+#for (i in 1:8){
+#  print(length(data[[i]]))
+#}
+#위의 for문을 통해 행3개가 삭제됨을 알 수 있음
+```
+
+2-2. 빈 문자열(“”)이 있는 행을 삭제하고, 각 열마다 NA 개수와 unique 값 및 개수를 다시 확인
+```{r}
+
+for (i in 2:6){
+  data<-data[!(data[[i]]==""), ]
+}
+
+data<-data[!(data[[8]]==''),]
+
+#for (i in 1:8){
+#  print(length(data[[i]]))        #3690개
+#}
+
+
+for (i in 1:8){
+  print(sum(is.na(data[[i]])))
+}
+
+for (j in 1:8){
+  print(unique(data[[j]]))
+  print(length(unique(data[[j]])))
+}
+```
+
+3. country가 ‘Korea’인 행만 남긴 다음, country 열을 제거하세요.
+```{r}
+data<-data[data$country=='Korea']
+#length(data$country)#3653개로 줄어듬
+data<-subset(data,select=-country)
+#library(bit64)
+#head(data) #dataframe에서 위의 6개 행을 볼 수 있다.따라서 열의 개수,열의 이름도 파악 가능(7개)
+```
+
+ 4. province 변수 내 ‘서울, 부산, 대구, 인천, 대전, 세종, 울산, 제주도’ 값을 다음과 같이 바꾸세요.
+```{r}
+data$province<-ifelse(data$province=='서울', '서울특별시',data$province)
+data$province<-ifelse(data$province=='부산', '부산광역시',data$province)
+data$province<-ifelse(data$province=='대구', '대구광역시',data$province)
+data$province<-ifelse(data$province=='인천', '인천광역시',data$province)
+data$province<-ifelse(data$province=='대전', '대전광역시',data$province)
+data$province<-ifelse(data$province=='세종', '세종특별자치시',data$province)
+data$province<-ifelse(data$province=='울산', '울산광역시',data$province)
+data$province<-ifelse(data$province=='제주도', '제주특별자치도',data$province)
+```
+ 
+5. confirmed_date를 날짜 자료형(Date)으로 바꾸세요.
+
+```{r}
+as.Date(data$confirmed_date,format='%Y-%m-%d')
+```
+
+ 6. 확진날짜(confirmed_date) 별 확진자 수에 대한 파생변수를 만드세요. (파생변수 이름 : confirmed_number)
+
+
+```{r}
+data1<-data%>%group_by(confirmed_date)%>%dplyr::summarize(confirmed_number = n())
+data3<-inner_join(data,data1,by = "confirmed_date")
+#data%>%group_by(confirmed_date)%>%mutate(confirmed_number=n())
+```
+
+7. 확진날짜(confirmed_date)의 주말 여부에 대한 파생변수를 만드세요. (파생변수 이름 : wday)
+예 : 2021-03-05 -> 주중, 2021-03-06 -> 주말
+```{r}
+data3$wday <- ifelse(weekdays(data3$confirmed_date) == "토요일" | weekdays(data3$confirmed_date) == "일요일", "주말","주중")
+
+```
+
+8. 나이대 별 일별 확진자 수에 대한 summary를 확인해 보세요. (예 : 10대의 날짜별 확진자 수의 분포) 
+(tapply 이용 시 편리)
+```{r}
+tapply(data3$confirmed_number, data3$age,summary)
+```
+
+Chapter 2. 시각화
+1 Line Plot. confirmed_date와 confirmed_number 변수를 이용하여 확진자수 추이 그래프를 그리고, 최대 확진자에 대한 정보도 표시하세요. (적절한 함수를 이용하여 #대신 정확한 날짜 및 수를 쓸 것 , 색:navy, lightblue, 제목:bold체)
+```{r}
+data3%>%ggplot(aes(x=confirmed_date, y=confirmed_number)) + 
+  geom_line(color='lightblue')+
+  ggtitle("코로나 확진자 수 추이-국내인 기준")+
+  theme(plot.title=element_text(face='bold',hjust=0.5))+
+  geom_text(x=as.Date("2020-02-05"),y=145,label='2020-03-05(145명)',color='navy')+ geom_point(mapping =aes(x = as.Date('2020-03-05'), y =145), color="navy");
+```
+1-2 Line Plot. province 별 확진자 수 추이 그래프를 그리세요.
+```{r}
+data3%>%ggplot()+aes(x=confirmed_date, y=confirmed_number,col=province)+geom_line()+
+  facet_wrap(~province)+
+  theme(axis.text.x=element_text(angle=45, hjust=1))
+```
+
+2 Bar Plot. 지역별 확진자 수를 state(확진자 상황) 그룹 별로 나누어 그래프를 그리세요. 
+
+```{r}
+
+data_prov = data3 %>% group_by(province)%>%summarize(n = n())
+
+data3 %>% 
+  left_join(data_prov,by = 'province') %>%
+  ggplot(aes(x = reorder(province,n))) +
+  geom_bar(aes(fill = state, color = state), position = 'stack', alpha = 0.5) +
+  xlab('지역')+
+  ylab('확진자 수')+
+  coord_flip()
+```
+
+3. Box Plot. 나이대별 일별 확진자 수 box plot을 그리세요
+
+```{r}
+data_age<-data%>%group_by(age,confirmed_date)%>%dplyr::summarize(count = n())
+data_age2<-inner_join(data,data_age, by='age')
+
+data_age2%>%ggplot(aes(x = age,y= count,fill = age,color=age))+
+  geom_boxplot(outlier.shape = NA,alpha=0.5)+
+  stat_boxplot(geom="errorbar")+
+  xlab('age')+
+  ylab('일단위 확진자 수')
+
+```
+3-2 . 나이대별 일별 확진자 수에 대한 일원분산분석(one-way ANOVA)을 실시하여 해석해 보세요.
+```{r}
+aov(confirmed_number ~ age, data = data3)
+summary(aov(confirmed_number ~ age, data = data3))
+```
+검정 통계량 F-value가 83.19로 나왔으며, p-value가 '<2e-16'으로 0.05(유의수준)보다 작다. 따라서 유의수준 0.05에서 귀무가설을 기각한다. 이에 따라, 유의 수준 5%하에서 나이대별 일별 확진자수 차이가 있다고 말할 수 있다.
+
+
+Chapter 3. 모델링_회귀분석
+MASS, tidyverse(다시 부를 필요 없음),corrplot, caret, MLmetrics 패키지 
+```{r}
+#install.packages('MASS')
+#install.packages("corrplot")
+#install.packages('caret')
+#install.packages('MLmetrics')
+
+library(MASS)
+library(corrplot)
+library(caret)
+library(MLmetrics)
+
+df<-Boston
+```
+1. 아래처럼 상관계수 플랏을 만들고 간단히 해석해 보세요.
+```{r}
+
+corrplot(cor(df),method='number',type='upper')
+```
+medv는 보스턴의 집 가격으로 종속변수이다. 가장 오른편의 숫자들로 종속변수와 각 독립변수들 간의 상관관계를 알 수 있다. lstat, rm이 medv에 큰 영향을 주며, lstat의 경우 값이 작을수록, rm의 경우 값이 높을수록 보스턴의 집 가격이 높은 경향을 보임을 알 수 있다. 이 때 주의해야할 점은 독립변수들 간의 밀접한 상관성입니다. 밀접한 상관성이 있는 것은 다중공산성을 피하기 위해 주의해야합니다. 
+
+2. 아래와 같이 종속변수로 사용할 medv와 이외 변수 간의 관계 파악을 위한 scatterplot 및 회귀 추세선을 그려보세요. (gather 이용 시 편리, 색 : lightblue)
+```{r}
+df%>%gather('age','black','chas','crim','dis','indus','lstat','nox','ptratio','rad','rm','tax','zn',key='column',value='val')%>%ggplot(aes(x=val, y=medv)) + 
+  geom_point(color='black') + 
+  stat_smooth(method = 'lm', color='lightblue')+
+  facet_wrap(~column,scales = 'free')+
+  ggtitle("Scatter plot of dependent variables vs Median Value(medv)")
+```
+
+3. 데이터를 train/test 데이터를 7:3으로 나누세요 (1234로 시드 고정 필수).
+```{r}
+set.seed(1234)
+train_idx=createDataPartition(df$medv, p=.7, times=1, list=FALSE)
+train=df[train_idx,]
+test=df[-train_idx,]
+#종속변수의 요인별 비율만큼 층화랜덤추출
+```
+
+3-2. train 데이터로 medv를 종속변수로 하고 나머지를 모두 독립 변수로 하는 회귀 모형을 만든 후 간단히 결과를 해석한 후, test에 대한 RMSE를 구하세요.
+```{r}
+x_train=train[,-14]
+y_train=as.data.frame(train[,14])
+names(y_train)=c("medv")
+train_y=y_train %>% unlist %>% as.vector
+x_test=test[,-14]
+y_test=as.data.frame(test[,14])
+names(y_test)=c("medv")
+test_y=y_test %>% unlist %>% as.vector
+
+
+
+
+all_new_lm = lm(medv ~ ., data=train)
+all_new_lm %>% summary
+
+pred_all_lm=predict(all_new_lm, test)
+all_lm_rmse=RMSE(pred_all_lm, test_y)
+all_lm_rmse
+```
+age, indus의 p-value가 낮으므로 다른 변수들이 고정된 상황에서 이들이 종속변수인 medv에 끼치는 영향은 유의미하지않다.
+
+
+3-3.모델의 RMSE를 낮출 수 있는 방법에 대해 간략히 설명해 주세요.
+편향과 분산을 낮추면 된다. 즉, 과적합과 과소적합을 피하면 되며 이의 한 방법으로 교차검증을 생각해볼 수 있다.(RMSE는 MSE에 루트를 씌운 것이며 MSE는 평균제곱오차로 n개를 표본추출했을 때, 표본평균에서 실제값을 뺀 값을 제곱하고 이를 합한 값을 n으로 나눈 것이다.)
+
+
+4. 적합한 회귀모형의 계수에 대해 아래와 같이 시각화 해주세요 (색 : red, yellow, blue)
+```{r}
+linear_coef<-summary(all_new_lm)$coefficients
+linear_coef<-as.data.frame(linear_coef)
+meaning<-c('(intercept)','crim','zn','indus','chas','nox','rm','age','dis','rad','tax','ptratio','black','lstat')
+linear_coef$meaning<-meaning
+linear_coef%>% ggplot(aes(x=reorder(meaning,Estimate),y=Estimate,fill=meaning))+
+  geom_bar(stat='identity',alpha=0.5)+coord_flip()+
+  xlab('intercept and variables')+
+  ylab('value')+
+  geom_text(x='(intercept)',y=20,label='39.14')+
+  geom_text(x='crim',y=0,label='-0.13')+
+  geom_text(x='zn',y=0,label='0.05')+
+  geom_text(x='indus',y=0,label='0')+
+  geom_text(x='chas',y=0,label='2.94')+
+  geom_text(x='nox',y=-8,label='-17.62')+
+  geom_text(x='rm',y=0,label='3.44')+
+  geom_text(x='age',y=0,label='0.02')+
+  geom_text(x='dis',y=0,label='-1.48')+
+  geom_text(x='rad',y=0,label='0.4')+
+  geom_text(x='tax',y=0,label='-0.01')+
+  geom_text(x='ptratio',y=0,label='-0.97')+
+  geom_text(x='black',y=0,label='0.01')+
+  geom_text(x='lstat',y=0,label='-0.59')+ 
+  scale_fill_manual(values = c( 'red', 'yellow','yellow','yellow','yellow','yellow','yellow','yellow','blue','yellow','yellow','yellow','yellow','yellow'))+ 
+  theme(legend.title = element_blank()) + 
+  theme(legend.position = 'none') 
+
+```
