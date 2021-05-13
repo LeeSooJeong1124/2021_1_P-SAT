@@ -1,0 +1,366 @@
+---
+---
+ 0 기본 세팅. tidyverse, data.table, gridExtra를 부른 후, setwd로 ‘data.csv’ 및 ‘test.csv’가 있는폴더로 경로를 설정하고, fread로 ‘data.csv’와 ‘test.csv’를 불러오세요.
+```{r}
+#install.packages('gridExtra')
+library(tidyverse)
+library(data.table)
+library(gridExtra)
+setwd("C:/Users/user/Desktop/P-SAT/3주차패키지")
+data<-read.csv('data.csv')
+test<-read.csv('test.csv')
+head(data)
+head(test)
+```
+ 1. ‘bmi(bmi 지수)’ 변수를 numeric 자료형으로 바꾸고, NA값을 mean imputation으로 채우세요.
+ 
+```{r}
+data$bmi%>% mode()
+data$bmi<-as.numeric(data$bmi)
+data1<-lapply(data, mean, na.rm = T)
+data1$bmi
+for (i in 1:4087){
+  data$bmi[i]<-ifelse(is.na(data$bmi[i]),data1$bmi,data$bmi[i])
+}
+unique(is.na(data$bmi))#FALSe만 나옴 즉 NA값 모두 사라짐
+```
+ 
+ 2. 문자형(character) 변수를 명목형 변수(factor)로 바꾸세요.
+```{r}
+data%>% str()
+data$gender<-as.factor(data$gender)
+data$ever_married<-as.factor(data$ever_married)
+data$work_type<-as.factor(data$work_type)
+data$Residence_type <-as.factor(data$Residence_type )
+data$smoking_status<-as.factor(data$smoking_status)
+```
+
+3. ‘id’ 변수를 제거하세요.
+```{r}
+data<-data[,-1]
+```
+
+4. 타겟(stoke)값 별로 범주형 변수의 분포를 다음과 같이 시각화 하고, 간단히 해석해보세요.
+(gather, gridExtra 패키지 내 함수 이용).
+```{r}
+data$hypertension<-as.factor(data$hypertension)
+data$heart_disease<-as.factor(data$heart_disease)
+
+factor_cols <- data %>% select(where(is.factor)) %>% colnames
+
+stroke1_data <- data %>% select(all_of(factor_cols), "stroke") %>%
+  filter(stroke==1) %>% gather(key="variable", value="value", -stroke) %>% 
+  select(-stroke)
+stroke0_data <- data %>% select(all_of(factor_cols), "stroke") %>%
+  filter(stroke==0) %>% gather(key="variable", value="value", -stroke) %>%
+  select(-stroke)
+
+df_data_stroke1 <- stroke1_data %>% group_by(variable,value) %>% summarise(total = n())
+df_data_stroke0 <- stroke0_data %>% group_by(variable,value) %>% summarise(total = n())
+
+
+plot1<-ggplot(df_data_stroke1, aes(fill=value, y=total, x=variable)) + 
+    geom_bar(position="fill",stat='identity',alpha=0.4) +coord_fixed(ratio = 0.5) +
+ 
+    #ggtitle("Studying 4 species..") +
+    #facet_wrap(~variable) +
+    
+  coord_flip()
+    #xlab("")
+plot2<-ggplot(df_data_stroke0, aes(fill=value, y=total, x=variable)) + 
+  
+    geom_bar(position="fill",stat='identity',alpha=0.4) +coord_fixed(ratio = 0.5) +
+ 
+    #ggtitle("Studying 4 species..") +
+    #facet_wrap(~variable) +
+    
+  coord_flip()
+```
+
+```{r fig.width=15, fig.height=6}
+grid.arrange(plot1,plot2, ncol=2)
+```
+
+
+ 5. 타겟(stoke)값 별로 수치형 변수의 분포를 다음과 같이 시각화 하고, 간단히 해석해보세요.
+(gather, gridExtra 패키지 내 함수 이용).
+```{r}
+#gather(data_stroke,key,value,gender:smoking_status)
+numeric3_cols <- data %>% select(age,avg_glucose_level,bmi) %>% colnames
+
+
+stroke0_data1 <- data %>% select(all_of(numeric3_cols), "stroke") %>%
+  filter(stroke==0) %>% gather(key="variable", value="value", -stroke) %>%
+  select(-stroke)
+stroke1_data1 <- data %>% select(all_of(numeric3_cols), "stroke") %>%
+  filter(stroke==1) %>% gather(key="variable", value="value", -stroke) %>%
+  select(-stroke)
+
+df_data_stroke1 <- stroke1_data1 %>% group_by(variable,value) %>% summarise(total = n())
+df_data_stroke0 <- stroke0_data1 %>% group_by(variable,value) %>% summarise(total = n())
+
+
+plot3<-ggplot(df_data_stroke1 , aes(x=value,col=variable)) + 
+  geom_line(stat="density")
+    #geom_bar(position="fill",stat='identity',alpha=0.4) +coord_fixed(ratio = 0.5) +
+ 
+    #ggtitle("Studying 4 species..") +
+    #facet_wrap(~variable) +
+
+    #xlab("")
+plot4<-ggplot(df_data_stroke0 , aes(x=value,col=variable)) + 
+  geom_line(stat="density")
+    #geom_bar(position="fill",stat='identity',alpha=0.4) +coord_fixed(ratio = 0.5) +
+ 
+    #ggtitle("Studying 4 species..") +
+    #facet_wrap(~variable) +
+
+
+
+    #ggtitle("Studying 4 species..") +
+    #facet_wrap(~variable) +
+    
+
+grid.arrange(plot3,plot4, nrow=2)
+```
+결과가 완전히 반대로 나왔어요... 좀 더 고려해 보겠습니다...
+
+
+ 6. 타겟 변수와 범주형 변수에 대한 카이스퀘어 독립성 검정을 진행하고 다음과 같이 출력하세요. 
+(데이터프레임을 만든 후, for 문으로 독립성 검정을 진행하여 chi 변수에 검정 결과를 넣으세요.)
+```{r}
+data_1<-data %>% select(gender,hypertension,heart_disease,ever_married,work_type,Residence_type,smoking_status)
+
+
+
+chi<-expand.grid(cate_Var=c('gender','hypertension','heart_disease','ever_married','work_type','Residence_type','smoking status'),chi=NA)
+for (i in 1:7){
+  print(chisq.test(data$stroke, data_1[[i]]))
+  d<-chisq.test(data$stroke, data_1[[i]])
+  if (d$p.value>=0.05){
+    chi$chi[i]<-'accept'
+  }
+  else{
+    chi$chi[i]<-'denied'
+  }
+}
+
+```
+
+
+7. 카이스퀘어 독립성 검정에서 가설을 기각하지 못한 범주형 변수를 제거하세요.
+```{r}
+chi_accept<-chi%>%filter(chi=='accept')
+chi_accept
+
+data<-data%>%subset(select=-c(gender,Residence_type))
+```
+
+
+8. train data에서 했던 전처리 방법들을 사용하여 전처리 하세요.
+```{r}
+test$bmi<-as.numeric(test$bmi)
+test1<-lapply(test, mean, na.rm = T)
+test1$bmi
+for (i in 1:1023){
+  test$bmi[i]<-ifelse(is.na(test$bmi[i]),test1$bmi,test$bmi[i])
+}
+unique(is.na(test$bmi))#FALSe만 나옴 즉 NA값 모두 사라짐
+test<-test[,-1]
+
+test$gender<-as.factor(test$gender)
+test$ever_married<-as.factor(test$ever_married)
+test$work_type<-as.factor(test$work_type)
+test$Residence_type <-as.factor(test$Residence_type )
+test$smoking_status<-as.factor(test$smoking_status)
+```
+
+
+
+
+
+
+
+Chapter 2. Catboost
+```{r}
+#install.packages('devtools')
+#devtools::install_url('https://github.com/catboost/catboost/releases/download/#v0.21/catboost-R-Windows-0.21.tgz',
+#INSTALL_opts = c("--no-multiarch"))
+library(catboost)
+library(caret)
+library(MLmetrics)
+```
+
+0. Catboost 모델의 특성 및 대표적인 파라미터에 대해 간단히 설명하세요.
+level-wise tree를 사용하며, 순차적으로 잔차 계산(ordered boosting)을 한다.ordered boosting할 때, 셔플링하여 데이터를 뽑아내며 일부만 추출할 수도 있다. 또한 현재 데이터의 타겟 값을 사용하지 않고, 이전 데이터들의 타겟 값만을 사용하면서도 오버피팅을 방지한다.Categorical Feauture Combinations으로 데이터 전처리에 있어 feature selection 부담이 조금 줄어든다고 할 수 있으며. 낮은 Cardinality 를 가지는 범주형 변수에 한해서, 기본적으로 One-hot encoding 을 시행한다. 마지막으로 Catboost 는 기본 파라미터가 기본적으로 최적화가 잘 되어있어서, 파라미터 튜닝에 크게 신경쓰지 않아도 된다.
+
+기본 파라키터 설명
+iteration:몇번 반복하는 지 설정
+learning rate: 학습률 설정
+depth:tree 길이 설정
+loss_function:손실함수 설정
+eval_matric: 평가지표 설정
+
+
+참고:
+ 1. Level-wise Tree
+XGBoost 와 더불어 Catboost 는 Level-wise 로 트리를 만들어나간다. (반면 Light GBM 은 Leaf-wise 다)
+Level-wise 와 Leaf-wise 의 차이는, 그냥 직관적으로 말하면 Level-wise 는 BFS 같이 트리를 만들어나가는 형태고, Leaf-wise 는 DFS 같이 트리를 만들어나가는 형태다. 물론 max_depth = -1 이면 둘은 같은 형태지만, 대부분의 부스팅 모델에서의 트리는 max_depth != -1 이기 때문에 이 둘을 구분하는 것이다.(https://lsjsj92.tistory.com/548 <-level wise tree의 모형을 볼 수 있다.)
+ 2. Orderd Boosting
+기존의 부스팅 모델이 일괄적으로 모든 훈련 데이터를 대상으로 잔차계산을 했다면, Catboost 는 일부만 가지고 잔차계산을 한 뒤, 이걸로 모델을 만들고, 그 뒤에 데이터의 잔차는 이 모델로 예측한 값을 사용한다.
+    1.  먼저 x1 의 잔차만 계산하고, 이를 기반으로 모델을 만든다. 그리고 x2 의 잔차를 이         모델로 예측한다.
+    2.  x1, x2 의 잔차를 가지고 모델을 만든다. 이를 기반으로 x3, x4 의 잔차를 모델로            예측한다.
+3. Random Permutation
+Ordered Boosting 을 할 때, 데이터 순서를 섞어주지 않으면 매번 같은 순서대로 잔차를 예측하는 모델을 만들 가능성이 있다. 이 순서는 사실 우리가 임의로 정한 것임으로, 순서 역시 매번 섞어줘야 한다. Catboost 는 이러한 것 역시 감안해서 데이터를 셔플링하여 뽑아낸다. 뽑아낼 때도 역시 모든 데이터를 뽑는게 아니라, 그 중 일부만 가져오게 할 수 있다. 이 모든 기법이 다 오버피팅 방지를 위해, 트리를 다각적으로 만들려는 시도이다. 
+4. Ordered Target Encoding
+현재 데이터의 타겟 값을 사용하지 않고, 이전 데이터들의 타겟 값만을 사용하니, Data Leakage 가 일어나지 않는 것이다.
+범주형 변수를 수로 인코딩하는 할 때, 오버피팅도 막고 수치값의 다양성도 만들어 주는.. 참 영리한 기법이 아닐 수 없다.
+5. Categorical Feauture Combinations
+데이터 전처리에 있어 feature selection 부담이 조금 줄어든다고 할 수 있다.
+6. One-hot Encoding
+Catboost 는 낮은 Cardinality 를 가지는 범주형 변수에 한해서, 기본적으로 One-hot encoding 을 시행한다. Low Cardinality 를 가지는 범주형 변수의 경우 Target Encoding 보다 One-hot 이 더 효율적이기에 one-hot encoding을 사용한다.
+7. Optimized Parameter tuning
+Catboost 는 기본 파라미터가 기본적으로 최적화가 잘 되어있어서, 파라미터 튜닝에 크게 신경쓰지 않아도 된다.
+
+
+
+ 1. expand.grid를 사용하여 다음과 같은 데이터 프레임을 만드세요. (데이터 프레임명: logloss_cb)
+```{r}
+logloss_cb<-expand.grid(depth=c(4,6,8),iterations=c(100,200),logloss=NA)
+logloss_cb
+```
+
+ 2. Catboost에 대해 depth와 iteration 파라미터 튜닝을 위한 grid search 5-fold CV를 진행하세요.
+```{r}
+ 
+  
+set.seed(1234)#train$stroke
+cv=createFolds(data$stroke,k=5)
+start_time=Sys.time()
+
+#6=nrow(logloss_cb) #log_loss_cb_list->temp_logloss=NULL mean(temp_logloss)
+for (i in 1:6){
+  logloss_cb_list<-as.list(NA)
+  for (j in 1:5){#5- fold cv
+    idx=cv[[j]]
+    cv_valid=catboost.load_pool(
+      data=data[idx,colnames(data)!='stroke'],
+      label=data[idx, 'stroke'],
+      cat_features = c(4,6,8))
+    
+    cv_train=catboost.load_pool(
+      data=data[-idx,colnames(data)!='stroke'],
+      label=data[-idx, 'stroke'],
+      cat_features = c(4,6,8))
+    
+    parameter_list=list(
+      loss_function='Logloss',
+      logging_level='Silent',
+      random_seed=1234,
+      depth=logloss_cb$depth[i],
+      iterations=logloss_cb$iterations[i])
+    
+    cb_model=catboost.train(cv_train,params=parameter_list)
+    cb_pred=catboost.predict(cb_model,cv_valid)#,prediction_type='Class'
+    logloss_cb_list[j]=LogLoss(cb_pred,data[idx,'stroke'])
+    }
+  
+logloss_cb[i,'logloss']<-mean(unlist(logloss_cb_list))
+}
+
+paste(Sys.time()-start_time)
+
+```
+
+
+ 3. logloss_cb에서 가장 낮은 logloss 값의 행을 출력하세요.
+```{r}
+c=1
+for (i in 1:3){
+  if (logloss_cb$logloss[i]<=logloss_cb$logloss[i+1]){
+    return(c<-i+1)
+  }
+  else {
+    return(c<-i)
+  }
+}
+logloss_cb$logloss[c]
+paste(logloss_cb%>%filter(logloss==logloss_cb$logloss[c]))
+```
+
+ 4. 가장 낮은 logloss 값의 파라미터로 전체 데이터를 학습시켜 test set에 대한 logloss값을 구하세요.
+```{r}
+
+best_parameter_list=list(
+      loss_function='Logloss',
+      logging_level='Silent',
+      random_seed=1234,
+      depth=logloss_cb$depth[c],
+      iterations=logloss_cb$iterations[c])
+
+
+cb_data=catboost.load_pool(
+      data=data[,colnames(data)!='stroke'],
+      label=data[, 'stroke'])
+cb_test=catboost.load_pool(
+      data=data[,colnames(data)!='stroke'],
+      label=data[, 'stroke'])
+
+
+cb_model=catboost.train(cb_data,params=best_parameter_list)
+cb_pred=catboost.predict(cb_model,cb_test)
+logloss_cb=LogLoss(cb_pred,test[,'stroke'])#에러같으게 나오기는 함...
+paste(logloss_cb)
+
+```
+
+
+Chapter 3. K-means Clustering
+```{r}
+#install.packages('factoextra')
+#install.packages('cluster')
+library(factoextra)
+library(cluster)
+```
+ 1. 수치형 변수(age, avg_glucose_level, bmi)에 대해 scale 함수로 정규화 스케일링을 하세요.
+```{r}
+data1 <-data%>%select('age','avg_glucose_level','bmi')
+data1 <- transform(data1, 
+                    z.age = scale(age), 
+                    z.avg_glucose_level = scale(avg_glucose_level),
+                    z.bmi = scale(bmi))
+data1<-data1%>%select('z.age','z.avg_glucose_level','z.bmi')
+```
+ 
+2. fviz_nbclust 함수로 다음과 같이 시각화 한 뒤, 적절한 K값이 무엇인지 설명하세요.
+
+```{r}
+
+
+plot6<-fviz_nbclust(data1, FUN=hcut, method = "wss", k.max = 10)
+plot5<-fviz_nbclust(data1, FUN=hcut, method = "silhouette", k.max = 10)
+grid.arrange(plot6,plot5, ncol=2)
+```
+
+3. K-means 클러스터링을 한 후, 다음과 같이 시각화하세요. (nstart = 1, iter.max =30, seed: 1234)
+```{r}
+set.seed(1234)
+k3=kmeans(data1,centers=3,nstart=1,iter.max =30)
+#k3
+fviz_cluster(k3,data=data1,alpha=0.5)
+
+```
+4. 사용한 변수인 age, avg_glucose_level(평균 혈당), bmi(bmi 수치)에 대해 다음과 같이 box_plot 시각화를 하고, 클러스터 별로 해석해보세요. (사용 색 : #845ec2, #ffc75f, #ff5e78)
+
+```{r}
+data3<-cbind(data1,k3$cluster)
+test <- ggplot(data3, aes(x = k3$cluster, y = z.age,group=k3$cluster,fill=k3$cluster,color=k3$cluster)) + 
+  geom_boxplot(col=c('#845ec2', '#ffc75f', '#ff5e78'),fill=c('#845ec2', '#ffc75f', '#ff5e78'),alpha=0.5)+stat_boxplot(geom="errorbar",col=c('#845ec2', '#ffc75f', '#ff5e78')) + theme_bw()+labs(x="cluster",y='age')
+test1 <- ggplot(data3, aes(x = k3$cluster, y = z.avg_glucose_level,group=k3$cluster,fill=k3$cluster,color=k3$cluster)) + 
+  geom_boxplot(col=c('#845ec2', '#ffc75f', '#ff5e78'),fill=c('#845ec2', '#ffc75f', '#ff5e78'),alpha=0.5) + stat_boxplot(geom="errorbar",col=c('#845ec2', '#ffc75f', '#ff5e78'))+theme_bw()+labs(x="cluster",y='avg_glucose_level')
+test2 <- ggplot(data3, aes(x =k3$cluster, y = z.bmi,group=k3$cluster,fill=k3$cluster,color=k3$cluster)) + 
+  geom_boxplot(col=c('#845ec2', '#ffc75f', '#ff5e78'),fill=c('#845ec2', '#ffc75f', '#ff5e78'),alpha=0.5) +stat_boxplot(geom="errorbar",col=c('#845ec2', '#ffc75f', '#ff5e78'))+ theme_bw()+labs(x="cluster",y='bmi')
+
+grid.arrange(test, test1, test2, nrow=1)
+```
+

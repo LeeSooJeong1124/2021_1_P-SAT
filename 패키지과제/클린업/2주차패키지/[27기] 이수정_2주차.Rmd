@@ -1,0 +1,293 @@
+---
+---
+ 0. 기본 세팅. tidyverse, data.table, VIM 패키지를 부른 후, setwd로 ‘data.csv’가 있는 폴더로 경로를 설정하고, 
+fread로 ‘data.csv’를 불러오세요.
+```{r}
+#install.packages('VIM')
+
+library(tidyverse)
+library(data.table)
+library(VIM)
+
+#getwd()현재 경로 확인
+setwd("C:/Users/user/Desktop/P-SAT/2주차패키지")
+data<-read.csv('data.csv')#fread()로 하니 오류가 ㅠㅠㅠㅠ
+head(data)
+```
+
+1. ‘2’로 끝나는 변수를 모두 제거하세요. (단순히 변수의 이름 또는 인덱스 열거를 통한 제거가 아닌 적절한 함수
+를 사용할 것) (‘2’로 끝나는 변수는 2016년 기준 값이고, ‘1’은 2017년 기준입니다. 정확한 모델링을 위해서는 이를 모두
+고려해야 하지만, 전처리 방법 학습 및 간단한 모델링을 위해 2017년 기준 변수만 사용하도록 하겠습니다.) 
+
+```{r}
+data<-data%>% select(!ends_with("2"))
+```
+
+2. ‘VIM’ 패키지를 이용하여 다음과 같이 시각화 한 후 간단히 해석해 보세요. (아래처럼 변수가 모두 출력이 안될
+수 있습니다. 사용 색: pink, lightyellow)
+
+```{r}
+VIM::aggr(data,prop=FALSE,numbers=TRUE,col=c("lightyellow","pink"))
+```
+
+3-1 NA imputation. 숫자 데이터의 NA값을 mean imputation을 통해 채우세요. (lapply 이용할 것) 
+
+```{r}
+data1<-lapply(data, mean, na.rm = T)
+for (i in 2:22){
+  data[[i]] <- ifelse (is.na(data[[i]]) , data1[[i]], data[[i]])
+}
+
+#for (i in 2:22){
+#  print(sum(is.na(data[[i]]))) ### na값이 없음을 알 수 있음
+#}
+```
+
+3-2. NA imputation. 범주 데이터의 NA값을 mode imputation을 통해 채우세요.
+```{r}
+names(which.max(table(data$OC)))           #최빈값: "open"
+names(which.max(table(data$ownerChange)))  #최빈값: "same"
+
+data[[1]] <- ifelse (is.na(data[[1]]) , "open", data[[1]])
+data[[23]] <- ifelse (is.na(data[[23]]) , "same", data[[23]])
+
+#for (i in 1:23){
+#  print(sum(is.na(data[[i]])))     ### na값이 없음을 알 수 있음
+#}
+```
+
+4. 변수 ‘OC(병원 개/폐업 여부)’를 타겟 변수로 사용하기 위해 “open”을 1, “close”를 0으로 바꾸세요.
+
+```{r}
+print(unique(data$OC))
+data$OC <- ifelse (data$OC=="open" , 1, 0)
+print(unique(data$OC))
+
+```
+
+ 5. 숫자 데이터 중 integer 자료형인 경우 num(numeric) 자료형으로 바꾸세요. (lapply 이용할 것)
+ 
+```{r}
+data[,1:22]<-lapply(data[,1:22],as.numeric)
+```
+
+Chapter 2. 분류모델
+
+```{r}
+library(caret)
+library(MLmetrics)
+library(randomForest)
+```
+
+1. 앞서 전처리한 데이터를 createDataPartition으로 7:3으로 train과 validation set으로 나누세요.
+(seed :1234, p: 0.3)
+```{r}
+set.seed(1234)
+train_idx=createDataPartition(data$OC, p=.3, times=1, list=FALSE)
+train=data[-train_idx,]
+validation=data[train_idx,]
+```
+
+2 Hold-out. train 데이터의 모든 변수를 이용하여 ‘OC’를 타겟으로 하는 로지스틱 회귀를 만들고 validation set의 Accuracy값을 구하세요.
+
+```{r}
+train_x=train %>% select(-OC) %>% as.matrix()
+train_y=train %>% select(OC) %>% unlist %>% as.vector
+validation_x=validation %>% select(-OC) %>% as.matrix()
+validation_y=validation %>% select(OC) %>% unlist %>% as.vector
+
+
+model_glm = glm(OC ~ . , family="binomial", data = train)
+model_glm%>%summary()
+
+glm.prob<-predict(model_glm,newdata=validation,type="response")
+glm.pred<-rep("0",91)
+glm.pred[glm.prob>0.5]="1"
+
+table(glm.pred,validation$OC)
+accuracy1<-83/(83+2+6)
+accuracy1#정확도: 91.20879%
+#https://m.blog.naver.com/PostView.nhn?blogId=tjdudwo93&logNo=221041154927&proxyReferer=&proxyReferer=https:%2F%2Fwww.google.com%2F
+
+```
+
+3.  3 Feature selection & Hold-out. 변수선택법 중 단계적선택법을 이용하여 변수를 선택하고, 선택된 변수들로 로지스틱 회귀를 만들어 validation set의 Accuracy값을 구하세요.
+
+```{r}
+step(lm(OC ~., train), scope = list(lower ~ 1, upper = ~.), direction = "both")
+#m <- lm(OC ~ .,data=train)
+#step(m, direction = "both")
+#Call:
+#lm(formula = OC ~ sga1 + noi1 + noe1 + interest1 + quickAsset1 + 
+#    receivableS1 + inventoryAsset1 + nonCAsset1 + receivableL1 + 
+#    surplus1, data = train)
+
+#Coefficients:
+#    (Intercept)             sga1             noi1             noe1        interest1  
+#      9.733e-01        3.208e-12       -6.651e-11        5.454e-11       -1.541e-10  
+#    quickAsset1     receivableS1  inventoryAsset1       nonCAsset1     receivableL1  
+#     -1.157e-11       -5.247e-11        1.836e-10        3.210e-12       -1.232e-08  
+#       surplus1  
+#     -8.217e-12  
+model_glm_feature = glm(OC ~ sga1 + noi1 + noe1 + interest1 + quickAsset1 + 
+    receivableS1 + inventoryAsset1 + nonCAsset1 + receivableL1 + 
+    surplus1 , family="binomial", data = train)
+
+glm.prob_f<-predict(model_glm_feature,newdata=validation,type="response")
+glm.pred_f<-rep("0",91)
+glm.pred_f[glm.prob_f>0.5]="1"
+
+table(glm.pred_f,validation$OC)
+accuracy1_f<-84/(84+1+6)
+accuracy1_f#정확도: 92.30769%
+```
+
+
+4. mtry에 대한 그리드서치를 위해 expand.grid를 이용하여 다음과 같은 데이터 프레임을 만드세요. (데이터 프레임 명: acc_rf)
+
+```{r}
+acc_rf <- expand.grid(mtry=c(3, 4, 5),acc=c(NA))
+acc_rf
+
+```
+
+5. 로지스틱회귀에서 선택된 변수들로 랜덤포레스트에 대한 5-fold CV 그리드서치를 진행하여 acc_rf의 acc 변수에 해당 Accuracy값을 넣으세요. (ntree 파라미터를 10으로 설정하고, 이중 for문을 이용하여 직접 코드를 짤 것)
+
+```{r}
+set.seed(1230)#계속 달라져서
+train[['ownerChange']]<-as.factor(train[['ownerChange']])
+cvstat<-numeric(3)
+cvstat
+for (i in 1:3){
+  for (j in 1:5){
+    funct<-createFolds(train[['OC']], k=5)#리스트
+    index<-funct[[j]]
+    cv.train=train[-index,]
+    cv.test=train[index,]
+    rf=randomForest(OC ~ sga1 + noi1 + noe1 + interest1 + quickAsset1 + 
+    receivableS1 + inventoryAsset1 + nonCAsset1 + receivableL1 + 
+    surplus1, data=cv.train, 
+    mtry=acc_rf[i,1],ntree=10)
+    prob_rf=predict(rf,cv.test)
+    yhat=ifelse(prob_rf>0.5,1,0)
+    table(yhat,cv.test$OC)
+    cvstat[j]<-sum(yhat == cv.test$OC) / nrow(cv.test)
+    acc_rf[i,2]<-cvstat[j]
+  } 
+}
+
+```
+
+6. acc_rf에서 가장 높은 Accuracy값의 행을 출력하세요.
+
+```{r}
+c=1
+for (i in 1:3){
+  if (acc_rf$acc[i]<=acc_rf$acc[i+1]){
+    return(c<-i+1)
+  }
+  else {
+    return(c<-i)
+  }
+}
+acc_rf[c,]
+acc_rf%>%filter(acc==acc_rf[c,2])
+```
+
+
+7. 가장 좋은 파라미터 조합으로 랜덤포레스트 모델을 학습시킨 후, varImpPlot과 ggplot을 이용해 다음과 같이
+시각화 하여 이를 기반으로 모델을 해석해주세요. (사용 색: pink)
+
+```{r}
+rf_info=randomForest(OC ~ sga1 + noi1 + noe1 + interest1 + quickAsset1 + 
+    receivableS1 + inventoryAsset1 + nonCAsset1 + receivableL1 + 
+    surplus1, data=cv.train, 
+    mtry=acc_rf[2,1],ntree=10)
+varImpPlot(rf_info)
+```
+
+
+
+Chapter 3. 회귀모델
+
+```{r}
+#install.packages("MASS")
+library(MASS)
+```
+ 1. Boston 데이터를 8:2로 train과 test set으로 나누세요. (p: 0.2)
+```{r}
+set.seed(1234) 
+
+test_idx <- sample(1:nrow(Boston), size=0.2*nrow(Boston), replace=F) # train-set 0.7, test-set 0.3
+
+
+
+
+X_train <- Boston[-test_idx,]
+
+X_test <- Boston[test_idx,]
+```
+
+2. expand.grid를 이용하여 다음과 같은 데이터 프레임을 만드세요. (데이터 프레임 명: RMSE_rf)
+
+```{r}
+RMSE_rf <- expand.grid(mtry=c(3, 4, 5),ntree=c(10,100,200),RMSE=c(NA))
+RMSE_rf
+```
+
+3. medv를 종속변수로 하는 랜덤포레스트에 대한 5-fold CV 그리드서치를 진행하여 RMSE_rf의 RMSE 변수에
+해당 RMSE값을 넣으세요. (이중 for문을 이용하여 직접 코드를 짤 것)
+
+```{r}
+set.seed(1230)#계속 달라져서
+X_train[['medv']]<-factor(X_train[['medv']])
+
+cvstat<-numeric(9)
+cvstat
+for (i in 1:9){
+  for (j in 1:5){
+    funct1<-createFolds(X_train[['medv']], k=5)#리스트
+    index1<-funct1[[j]]
+    cv.train=X_train[-index1,]
+    cv.test=X_train[index1,]
+    rf=randomForest(factor(medv) ~ ., data=cv.train, mtry=RMSE_rf[i,1], ntree=RMSE_rf[i,2])
+    prob_rf=predict(rf,cv.test)
+
+    cvstat[j]<-sqrt(mean(sum(as.numeric(cv.test$medv)-as.numeric(prob_rf))))
+    RMSE_rf[i,3]<-mean(cvstat[j])##########
+  } 
+}
+
+
+```
+
+
+4. RMSE_rf에서 가장 낮은 RMSE값을 가진 행을 출력하세요.
+
+```{r}
+#RMSE이므로 0보다 큼
+c=0
+for (i in 1:9){
+  if (RMSE_rf$RMSE[i]<=RMSE_rf$RMSE[i+1]){
+    return(c<-i+1)
+  }
+  else {
+    return(c<-i)
+  }
+}
+RMSE_rf[c,]
+```
+
+5. train set으로 그리드 서치로 나온 가장 좋은 조합의 파라미터의 랜덤포레스트를 학습시킨 후, test set의
+RMSE를 구하세요.
+
+```{r}
+rf=randomForest(factor(medv) ~ ., data=cv.train, mtry=3, ntree=10)
+prob_rf=predict(rf,cv.test)
+sqrt(mean(sum(as.numeric(cv.test$medv)-as.numeric(prob_rf))))
+```
+
+
+
+
+
